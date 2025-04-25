@@ -133,17 +133,21 @@ class OpenAIImageModel(_BaseOpenAIImageModel, KeyModel):
         if not imgs:
             api_response = client.images.generate(**kwargs)
         else:
-            img = imgs[0]
-            if not img.path:
-                raise ValueError(f"Attachment must be a local file for editing: {img!r}")
+            for img in imgs:
+                if not img.path:
+                    raise ValueError(f"Attachment must be a local file for editing: {img!r}")
 
-            edit_kwargs = kwargs.copy()
-            with open(img.path, "rb") as f:
+            files = [open(img.path, "rb") for img in imgs]
+
+            try:
                 api_response = client.images.edit(
-                    image=f,
+                image=files[0] if len(files) == 1 else files,
                     # mask=
-                    **edit_kwargs
+                    **kwargs
                 )
+            finally:
+                for f in files:
+                    f.close()
 
         # pull out the base64 result
         result_b64 = api_response.data[0].b64_json
@@ -180,20 +184,23 @@ class AsyncOpenAIImageModel(_BaseOpenAIImageModel, AsyncKeyModel):
         ]
 
         if not imgs:
-            # Generate image
             api_response = await client.images.generate(**kwargs)
         else:
-            img = imgs[0]
-            if not img.path:
-                raise ValueError(f"Attachment must be a local file: {img!r}")
+            for img in imgs:
+                if not img.path:
+                    raise ValueError(f"Attachment must be a local file for editing: {img!r}")
 
-            with open(img.path, "rb") as f:
-               with open(img.path, "rb") as f:
-                    api_response = await client.images.edit(
-                        image=f,
-                        # mask=...
-                        **edit_kwargs
-                    )
+            files = [open(img.path, "rb") for img in imgs]
+
+            try:
+                api_response = client.images.edit(
+                image=files[0] if len(files) == 1 else files,
+                    # mask=
+                    **kwargs
+                )
+            finally:
+                for f in files:
+                    f.close()
 
         result_b64 = api_response.data[0].b64_json
         if hasattr(api_response, "usage") and api_response.usage:

@@ -1,0 +1,20 @@
+[project]
+name = "llm-openai-images"
+version = "0.1.0"
+description = "LLM plugin for OpenAI gpt-image-1 image generation and editing"
+requires-python = ">=3.9"
+authors = [{name = "Graham"}]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+
+dependencies = [
+  "llm>=0.23",
+  "openai>=1.76.0",
+]
+
+[project.entry-points.llm]
+openai-image = "llm_openai_images"
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"

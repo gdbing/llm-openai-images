@@ -1,9 +1,9 @@
 [project]
 name = "llm-openai-images"
-version = "0.1.0"
+version = "0.1"
 description = "LLM plugin for OpenAI gpt-image-1 image generation and editing"
 requires-python = ">=3.9"
-authors = [{name = "Graham"}]
+authors = [{name = "graham"}]
 license = {text = "Apache-2.0"}
 readme = "README.md"
 

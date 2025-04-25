@@ -2,7 +2,7 @@ from enum import Enum
 import openai
 from llm import hookimpl, KeyModel, AsyncKeyModel, Prompt, Response, Options
 from llm.utils import simplify_usage_dict
-from pydantic import Field, create_model
+from pydantic import Field
 from typing import Iterator, AsyncGenerator, Optional
 
 
@@ -36,16 +36,22 @@ def register_models(register):
     )
 
 class QualityEnum(str, Enum):
-    auto = "auto"
     low = "low"
     medium = "medium"
     high = "high"
 
 class SizeEnum(str, Enum):
-    auto = "auto"
-    square = "1024x1024"
-    portrait = "1024x1536"
-    landscape = "1536x1024"
+    square = "square"
+    portrait = "portrait"
+    landscape = "landscape"
+
+    @property
+    def dimensions(self) -> str:
+        return {
+            SizeEnum.square: "1024x1024",
+            SizeEnum.portrait: "1024x1536",
+            SizeEnum.landscape: "1536x1024",
+        }[self]
 
 class ImageOptions(Options):
     quality: Optional[QualityEnum] = Field(
@@ -58,29 +64,52 @@ class ImageOptions(Options):
     size: Optional[SizeEnum] = Field(
         description=(
             "The size of the generated images. One of "
-            "1024x1024 (default), "
-            "1536x1024 (landscape), "
-            "1024x1536 (portrait)"
+            "square (1024x1024), "
+            "landscape (1536x1024), "
+            "portrait (1024x1536)"
         ),
         default=None,
     )
 
-class OpenAIImageModel(KeyModel):
-    """
-    Sync model for OpenAI image generation/editing (gpt-image-1).
-    """
+class _BaseOpenAIImageModel(KeyModel):
     needs_key = "openai"
     key_env_var = "OPENAI_API_KEY"
     can_stream = False
     supports_schema = False
     attachment_types = {"image/png", "image/jpeg", "image/webp"}
 
-    # no custom options for now
-    Options = create_model("ImageOptions", __base__=(Options,))
+    # Assign the pre-defined Options class
+    Options = ImageOptions
 
     def __init__(self, model_name: str):
         self.model_id = f"openai/{model_name}"
         self.model_name = model_name
+
+    def _build_api_kwargs(self, prompt: Prompt) -> dict:
+        """Build the dictionary of arguments for the OpenAI API call."""
+        if not prompt.prompt:
+            raise ValueError("Prompt text is required for image generation/editing.")
+
+        # Access options from the prompt object
+        size = (prompt.options.size or SizeEnum.square).dimensions
+        quality = (prompt.options.quality or QualityEnum.medium).value
+
+        kwargs = {
+            "model": self.model_name,
+            "prompt": prompt.prompt,
+            "n": 1,
+            "size": size,
+            "quality": quality,
+            # output_format="png",
+            # "moderation": "low", # only used by generate, rejected by edit
+        }
+
+        return kwargs
+
+class OpenAIImageModel(_BaseOpenAIImageModel, KeyModel):
+    """
+    Sync model for OpenAI image generation/editing (gpt-image-1).
+    """
 
     def execute(
         self,
@@ -91,43 +120,29 @@ class OpenAIImageModel(KeyModel):
         key: str | None,
     ) -> Iterator[str]:
         client = openai.OpenAI(api_key=self.get_key(key))
+        kwargs = self._build_api_kwargs(prompt)
+
         imgs = [
             a for a in (prompt.attachments or [])
             if a.resolve_type() in self.attachment_types
         ]
 
-        if not prompt.prompt:
-            raise ValueError("Prompt text is required for image generation/editing.")
-
         result_b64 = None
         usage = None
 
         if not imgs:
-            # generate
-            api_response = client.images.generate(
-                model=self.model_name,
-                prompt=prompt.prompt,
-                n=1,
-                size="1536x1024", #"1024x1024",
-                quality="medium",
-                # output_format="png",
-                moderation="low",
-            )
+            api_response = client.images.generate(**kwargs)
         else:
-            # edit, only first image supported here
             img = imgs[0]
             if not img.path:
-                raise ValueError(f"Attachment must be a local file: {img!r}")
+                raise ValueError(f"Attachment must be a local file for editing: {img!r}")
+
+            edit_kwargs = kwargs.copy()
             with open(img.path, "rb") as f:
                 api_response = client.images.edit(
-                    model=self.model_name,
                     image=f,
-                    prompt=prompt.prompt,
-                    n=1,
-                    size="1536x1024", #"1024x1024",
-                    quality="medium",
-                    # output_format="png",
-                    moderation="low",
+                    # mask=
+                    **edit_kwargs
                 )
 
         # pull out the base64 result
@@ -143,21 +158,10 @@ class OpenAIImageModel(KeyModel):
         yield result_b64
 
 
-class AsyncOpenAIImageModel(AsyncKeyModel):
+class AsyncOpenAIImageModel(_BaseOpenAIImageModel, AsyncKeyModel):
     """
     Async model for OpenAI image generation/editing (gpt-image-1).
     """
-    needs_key = "openai"
-    key_env_var = "OPENAI_API_KEY"
-    can_stream = False
-    supports_schema = False
-    attachment_types = {"image/png", "image/jpeg", "image/webp"}
-
-    Options = create_model("ImageOptions", __base__=(Options,))
-
-    def __init__(self, model_name: str):
-        self.model_id = f"openai/{model_name}"
-        self.model_name = model_name
 
     async def execute(
         self,
@@ -168,39 +172,28 @@ class AsyncOpenAIImageModel(AsyncKeyModel):
         key: str | None,
     ) -> AsyncGenerator[str, None]:
         client = openai.AsyncOpenAI(api_key=self.get_key(key))
+        kwargs = self._build_api_kwargs(prompt)
+
         imgs = [
             a for a in (prompt.attachments or [])
             if a.resolve_type() in self.attachment_types
         ]
 
-        if not prompt.prompt:
-            raise ValueError("Prompt text is required for image generation/editing.")
-
         if not imgs:
-            api_response = await client.images.generate(
-                model=self.model_name,
-                prompt=prompt.prompt,
-                n=1,
-                size="1536x1024", #"1024x1024",
-                quality="medium",
-                # output_format="png",
-                moderation="low",
-            )
+            # Generate image
+            api_response = await client.images.generate(**kwargs)
         else:
             img = imgs[0]
             if not img.path:
                 raise ValueError(f"Attachment must be a local file: {img!r}")
+
             with open(img.path, "rb") as f:
-                api_response = await client.images.edit(
-                    model=self.model_name,
-                    image=f,
-                    prompt=prompt.prompt,
-                    n=1,
-                    size="1536x1024", #"1024x1024",
-                    quality="medium",
-                    # output_format="png",
-                    moderation="low",
-                )
+               with open(img.path, "rb") as f:
+                    api_response = await client.images.edit(
+                        image=f,
+                        # mask=...
+                        **edit_kwargs
+                    )
 
         result_b64 = api_response.data[0].b64_json
         if hasattr(api_response, "usage") and api_response.usage:

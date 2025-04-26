@@ -1,6 +1,15 @@
 # llm-openai-images
 
+[![PyPI](https://img.shields.io/pypi/v/llm-openai-images.svg)](https://pypi.org/project/llm-openai-images/)
+
 An [LLM](https://llm.datasette.io/) plugin providing access to `gpt-image-1`, OpenAI's latest image generation and editing model.
+
+## Installation
+
+Install this plugin in the same environment as [LLM](https://llm.datasette.io/).
+```bash
+llm install llm-openai-images
+```
 
 ## API Key Setup
 

@@ -1,9 +1,9 @@
 [project]
 name = "llm-openai-images"
-version = "0.1"
+version = "0.1.1"
 description = "LLM plugin for OpenAI gpt-image-1 image generation and editing"
 requires-python = ">=3.9"
-authors = [{name = "graham"}]
+authors = [{name = "Graham Bing"}]
 license = {text = "Apache-2.0"}
 readme = "README.md"
 
@@ -18,3 +18,8 @@ openai-image = "llm_openai_images"
 [build-system]
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
+
+[project.urls]
+Homepage = "https://github.com/gdbing/llm-openai-images"
+Issues = "https://github.com/gdbing/llm-openai-images/issues"
+Changelog = "https://github.com/gdbing/llm-openai-images/releases"

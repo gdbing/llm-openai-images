@@ -85,6 +85,9 @@ class _BaseOpenAIImageModel(KeyModel):
         self.model_id = f"openai/{model_name}"
         self.model_name = model_name
 
+    def __str__(self):
+        return f"OpenAI: {self.model_id}"
+        
     def _build_api_kwargs(self, prompt: Prompt) -> dict:
         """Build the dictionary of arguments for the OpenAI API call."""
         if not prompt.prompt:
